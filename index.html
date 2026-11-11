@@ -279,4 +279,244 @@
 			["CIT", "2D", "#07", "J/R 음극 상태 검사"],
 			["CIT", "2D", "#06", "Taping 검사"],
 			["LFW", "2D", "#08", "음극 LID 원자재 검사 (4샷)"],
-			["LFW", "TM", "#09",
+			["LFW", "TM", "#09", "Lid 동심도 검사(TM)"],
+			["LFW", "2D", "#10", "LFW 음극 용접 후 검사"],
+			["FTW", "2D", "#29", "FTW 용접 후 검사"],
+			["ISI", "2D", "#11", "Insulator 원자재 검사"],
+			["ISI", "2D", "#13", "Can 원자재 외부 리벳 검사 (4샷)"],
+			["ISI", "2D", "#14", "Can 원자재 내부 리벳 검사"],
+			["ISI", "2D", "#15", "Can 원자재 개구부 검사"],
+			["ISI", "2D", "#16", "Can 내벽 검사"],
+			["ISI", "TM", "#17", "Can 원자재 총고 검사(TM)"],
+			["ISI", "3D", "#101", "Can 내부 Rivet 평탄도 검사(3D)"],
+			["JRI", "2D", "#30", "J/R 음극 측면 검사"],
+			["JRI", "3D", "#102", "Lid 삽입성 검사(3D)"],
+			["SMW", "2D", "#19", "SMW 용접 전 검사"],
+			["SMW", "2D", "#20", "SMW 용접 후 검사"],
+			["CRW", "2D", "#21", "Reform 전 J/R Core 분리막 검사"],
+			["CRW", "2D", "#22", "Reform 후 J/R Core 분리막 검사"],
+			["CRW", "2D", "#23", "CRW 용접 후 검사"],
+			["CRW", "3D", "#103", "Knurl 상태 및 이물 검사-1(3D)"],
+			["CRW", "3D", "#104", "Knurl 상태 및 이물 검사-2(3D)"],
+			["ELF", "2D", "#24", "주액 후 J/R Core 분리막 검사"],
+			["LHS", "2D", "#25", "Plug 원자재 검사"],
+			["LHS", "2D", "#27", "LHS 용접 전 검사 (4샷)"],
+			["LHS", "2D", "#28", "LHS 용접 후 검사"],
+			["LHS", "3D", "#105", "Cell 총고 검사(3D)"],
+			["EOL", "3D", "", "Side 측면 외경 검사-1(3D)"],
+			["EOL", "3D", "", "Side 측면 외경 검사-2(3D)"],
+			["EOL", "3D", "", "Side 측면 외경 검사-3(3D)"],
+			["EOL", "3D", "", "Side 측면 외경 검사-4(3D)"],
+			["EOL", "3D", "", "평탄도·총고 검사(3D)"]
+		];
+		const TYPE_ORDER = ["2D", "3D", "TM"];
+
+		// 드롭다운에 보이는 이름: [3D] #101 Can 내부 Rivet 평탄도 검사(3D)
+		function visionLabel(item) {
+			const [, type, no, name] = item;
+			return `[${type}] ${no ? no + " " : ""}${name}`;
+		}
+
+		function num(no) { return no ? parseInt(no.replace("#", ""), 10) : 9999; }
+
+		window.onload = function () {
+			// 공정 드롭다운 채우기 (중복 없이, 등록 순서대로)
+			const processSelect = document.getElementById('process');
+			[...new Set(MASTER.map(m => m[0]))].forEach(p => addOption(processSelect, p));
+			filterDropdowns();
+		};
+
+		function addOption(parent, value) {
+			const opt = document.createElement('option');
+			opt.value = value; opt.innerText = value;
+			parent.appendChild(opt);
+		}
+
+		// 공정 선택 시 Vision Type 목록을 2D / 3D / TM 그룹으로 다시 구성
+		function filterDropdowns() {
+			const process = document.getElementById('process').value;
+			const visionSelect = document.getElementById('visionType');
+			const prev = visionSelect.value;
+			visionSelect.innerHTML = '<option value="-">-</option>';
+
+			const list = MASTER.filter(m => process === "-" || m[0] === process);
+			TYPE_ORDER.forEach(type => {
+				const items = list.filter(m => m[1] === type).sort((a, b) => num(a[2]) - num(b[2]));
+				if (!items.length) return;
+				const group = document.createElement('optgroup');
+				group.label = type + " 검사기";
+				items.forEach(m => addOption(group, visionLabel(m)));
+				visionSelect.appendChild(group);
+			});
+
+			// 기존 선택이 새 목록에도 있으면 유지
+			if ([...visionSelect.options].some(o => o.value === prev)) visionSelect.value = prev;
+		}
+
+		// Vision Type을 먼저 고르면 공정 자동 선택
+		function syncFromVision() {
+			const value = document.getElementById('visionType').value;
+			const item = MASTER.find(m => visionLabel(m) === value);
+			if (!item) return;
+			const processSelect = document.getElementById('process');
+			if (processSelect.value !== item[0]) {
+				processSelect.value = item[0];
+				filterDropdowns();
+				document.getElementById('visionType').value = value;
+			}
+		}
+
+		// ===== 시각 처리 =====
+		// 입력칸 값 형식: 2026-11-09T14:30  →  시트/리포트 표기: 2026-11-09 14:30 (24시간)
+		function pad(n) { return String(n).padStart(2, '0'); }
+
+		function nowForInput() {
+			const d = new Date();
+			return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+		}
+
+		function setTimeField(fieldId) {
+			document.getElementById(fieldId).value = nowForInput();
+		}
+
+		function toDisplay(inputValue) {
+			return inputValue ? inputValue.replace('T', ' ') : '';
+		}
+
+		function saveAndCopy() {
+			const fieldsToValidate = [
+				{ id: 'type', name: '종류 (Type)' },
+				{ id: 'site', name: 'Site' },
+				{ id: 'process', name: '공정 (Process)' },
+				{ id: 'hogi', name: '호기 (Unit No.)' },
+				{ id: 'visionType', name: '2-2. Vision Type' },
+				{ id: 'source', name: '원인처 (Source of Cause)' }
+			];
+
+			for (let field of fieldsToValidate) {
+				if (document.getElementById(field.id).value === '-') {
+					alert(`[경고] ${field.name} 항목을 선택해주세요.`);
+					document.getElementById(field.id).focus();
+					return;
+				}
+			}
+
+			const textFields = [
+				{ id: 'worker', name: '작업자 (PIC)' },
+				{ id: 'phenomenon', name: '현상 (Phenomenon)' },
+				{ id: 'cause', name: '원인 (Cause)' },
+				{ id: 'action', name: '조치 (Action)' }
+			];
+
+			const startVal = document.getElementById('startTime').value;
+			const endVal = document.getElementById('endTime').value;
+			if (!startVal) { alert('[경고] 발생시간을 입력해주세요.'); document.getElementById('startTime').focus(); return; }
+			if (!endVal) { alert('[경고] 조치완료 시각을 입력해주세요.'); document.getElementById('endTime').focus(); return; }
+			if (endVal < startVal) { alert('[경고] 조치완료 시각이 발생시간보다 빠릅니다.'); document.getElementById('endTime').focus(); return; }
+
+			for (let field of textFields) {
+				if (!document.getElementById(field.id).value.trim()) {
+					alert(`[경고] ${field.name} 내용을 입력해주세요.`);
+					document.getElementById(field.id).focus();
+					return;
+				}
+			}
+
+			// 부동시간(분) = 조치완료 - 발생시간
+			const downtimeMin = Math.round((new Date(endVal) - new Date(startVal)) / 60000);
+
+			const btn = document.getElementById('submitBtn');
+			btn.disabled = true;
+			btn.innerText = "처리 중... (Processing...)";
+
+			const data = {
+				type: document.getElementById('type').value,
+				site: document.getElementById('site').value,
+				process: document.getElementById('process').value,
+				hogi: document.getElementById('hogi').value,
+				visionType: document.getElementById('visionType').value,
+				source: document.getElementById('source').value,
+				startTime: toDisplay(startVal),
+				endTime: toDisplay(endVal),
+				downtime: downtimeMin,
+				worker: document.getElementById('worker').value.trim(),
+				phenomenon: document.getElementById('phenomenon').value.trim(),
+				cause: document.getElementById('cause').value.trim(),
+				action: document.getElementById('action').value.trim()
+			};
+
+			// 구글 시트 A~M열 순서대로 전송
+			// 종류 | Site | 공정 | 호기 | Vision Type | 원인처 | 발생시간 | 조치완료 | 부동시간(분) | 작업자 | 현상 | 원인 | 조치
+			const sheetRow = [
+				data.type, data.site, data.process, data.hogi, data.visionType, data.source,
+				data.startTime, data.endTime, data.downtime, data.worker, data.phenomenon, data.cause, data.action
+			];
+
+			const report = `[부동 분석 공유 (Downtime Analysis Report)]
+종류 (Type): ${data.type}
+0. Site : ${data.site}
+1-1. 공정 (Process) : ${data.process}
+1-2. 호기 (Unit No.) : ${data.hogi}
+2-2. Vision Type : ${data.visionType}
+2-3. 원인처 (Source of Cause) : ${data.source}
+3-1. 발생시간 (Occurrence Time) : ${data.startTime}
+3-2. 조치완료 (Action Completed) : ${data.endTime}
+3-3. 부동시간 (Downtime) : ${data.downtime}분
+4. 작업자 (PIC) : ${data.worker}
+5. 현상 (Phenomenon) : ${data.phenomenon}
+6. 원인 (Cause) : ${data.cause}
+7. 조치 (Action) : ${data.action}`;
+
+			fetch(SCRIPT_URL, {
+				method: "POST",
+				mode: "no-cors",
+				headers: { "Content-Type": "text/plain;charset=utf-8" },
+				body: JSON.stringify(sheetRow)
+			})
+				.then(() => {
+					copyText(report, btn);
+				})
+				.catch(err => {
+					console.error(err);
+					copyText(report, btn);
+				});
+		}
+
+		function copyText(text, btnElement) {
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				navigator.clipboard.writeText(text).then(() => {
+					alert("구글 시트에 데이터가 전송되었고, 리포트가 복사되었습니다!\n\n(Data sent and report copied!)");
+					resetBtn(btnElement);
+				}).catch(() => {
+					fallbackCopy(text, btnElement);
+				});
+			} else {
+				fallbackCopy(text, btnElement);
+			}
+		}
+
+		function fallbackCopy(text, btnElement) {
+			const textarea = document.createElement("textarea");
+			textarea.value = text;
+			textarea.style.position = "fixed";
+			document.body.appendChild(textarea);
+			textarea.select();
+			try {
+				document.execCommand("copy");
+				alert("저장 및 복사가 완료되었습니다!\n(Save and copy completed!)");
+			} catch (err) {
+				alert("복사 실패 (Copy failed)");
+			}
+			document.body.removeChild(textarea);
+			resetBtn(btnElement);
+		}
+
+		function resetBtn(btnElement) {
+			btnElement.disabled = false;
+			btnElement.innerText = "저장 및 리포트 복사 (Save & Copy Report)";
+		}
+	</script>
+
+</body>
+
+</html>
